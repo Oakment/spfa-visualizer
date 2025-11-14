@@ -32,6 +32,8 @@ def main():
     screen = pygame.display.set_mode((800, 600))
     pygame.display.set_caption("SPFA Visualizer")
 
+    font = pygame.font.SysFont(None, 20)
+
     # Create Visualizer (holds maze, drawing and helpers)
     viz = Visualizer(rows=ROWS, cols=COLS, cell_size=CELL_SIZE,
                      grid_origin=GRID_ORIGIN, maze=maze, start=start, end=end)
@@ -45,7 +47,7 @@ def main():
     print(f"Start node {start} neighbors: {graph.neighbors(start)}")
     print(f"End node {end} neighbors: {graph.neighbors(end)}")
 
-    # -------- Convert graph to Dijkstra edges --------
+    # -------- Convert graph to Dijkstra edges (prepare once) --------
     edges = []   # (u,v,w)
 
     for (r, c) in graph.nodes:
@@ -60,15 +62,30 @@ def main():
     # IMPORTANT: n must match numeric ID range (0..ROWS*COLS-1)
     n = ROWS * COLS
 
-    path_ids = SPFA_Algorithms.dijkstras(
-        n=n,
-        edges=edges,
-        src=src_id,
-        dst=dst_id
-    )
+    # UI state
+    shortest_path = []  # initially nothing — only start/end are visible
+    selected_algo = "Dijkstra"  # hardcoded selection options: "Dijkstra", "SPFA" (if implemented)
 
-    # Convert node IDs → (r,c)
-    shortest_path = [viz.coord_from_id(pid) for pid in path_ids]
+    # UI elements (simple buttons)
+    find_button = pygame.Rect(600, 50, 150, 40)
+    algo_buttons = [
+        (pygame.Rect(600, 110, 150, 30), "Dijkstra"),
+    ]
+
+    def compute_shortest_path(algo_name):
+        nonlocal shortest_path
+        print(f"Computing path using: {algo_name}")
+        try:
+            if algo_name == "Dijkstra":
+                path_ids = SPFA_Algorithms.dijkstras(n=n, edges=edges, src=src_id, dst=dst_id)
+            else:
+                print(f"Unknown algorithm: {algo_name}")
+                return
+
+            shortest_path = [viz.coord_from_id(pid) for pid in path_ids]
+            print(f"Found path length: {len(shortest_path)}")
+        except Exception as e:
+            print("Error computing path:", e)
 
     # -------- Main Loop --------
     running = True
@@ -78,8 +95,40 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = event.pos
+
+                # Find button clicked -> compute shortest path with selected algorithm
+                if find_button.collidepoint(mx, my):
+                    compute_shortest_path(selected_algo)
+
+                # Algorithm selection buttons
+                for rect, name in algo_buttons:
+                    if rect.collidepoint(mx, my):
+                        selected_algo = name
+                        print(f"Selected algorithm: {selected_algo}")
+
         screen.fill((50, 50, 50))
+
+        # Draw grid (start & end will be visible even when shortest_path is empty)
         viz.draw_grid(screen, path=shortest_path)
+
+        # Draw UI panel
+        pygame.draw.rect(screen, (30, 30, 30), (580, 30, 190, 200))
+        pygame.draw.rect(screen, (70, 130, 180), find_button)
+        screen.blit(font.render("Find Path", True, (255, 255, 255)), (find_button.x + 20, find_button.y + 10))
+
+        # Algorithm buttons
+        for rect, name in algo_buttons:
+            color = (100, 100, 100)
+            if name == selected_algo:
+                color = (100, 180, 100)
+            pygame.draw.rect(screen, color, rect)
+            screen.blit(font.render(name, True, (255, 255, 255)), (rect.x + 10, rect.y + 7))
+
+        # Show currently selected algorithm text
+        screen.blit(font.render(f"Selected: {selected_algo}", True, (220, 220, 220)), (600, 200))
+
         pygame.display.flip()
 
     pygame.quit()
