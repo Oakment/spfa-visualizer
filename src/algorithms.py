@@ -1,8 +1,9 @@
 import heapq
+import time
 
 class SPFA_Algorithms:
     @staticmethod
-    def dijkstras(n, edges, src, dst):
+    def dijkstras(n, edges, src, dst, visualizer_callback=None, delay=0.05):
         adj = {i: [] for i in range(n)}
 
         # edges: (u,v,w)
@@ -11,6 +12,7 @@ class SPFA_Algorithms:
 
         dist = {i: float("inf") for i in range(n)}
         parent = {i: None for i in range(n)}
+        visited = set()
 
         dist[src] = 0
         pq = [(0, src)]
@@ -23,6 +25,13 @@ class SPFA_Algorithms:
 
             if cur_dist > dist[node]:
                 continue
+
+            visited.add(node)
+            
+            # Visualize current exploration
+            if visualizer_callback:
+                visualizer_callback(list(visited), [])
+                time.sleep(delay)
 
             for neigh, w in adj[node]:
                 new_dist = cur_dist + w
@@ -39,41 +48,65 @@ class SPFA_Algorithms:
             cur = parent[cur]
 
         path.reverse()
-        return path    # list of node indices
+        
+        # Final visualization with path
+        if visualizer_callback:
+            visualizer_callback(list(visited), path)
+            
+        return path, visited  # return both path and visited nodes
     
     @staticmethod
-    def bellman_ford(n, edges, src, dst):
+    def bellman_ford(n, edges, src, dst, visualizer_callback=None, delay=0.05):
     
         dist = {i: float("inf") for i in range(n)}
         parent = {i: None for i in range(n)}
         dist[src] = 0
+        visited = set([src])
 
-       
-        for _ in range(n - 1):
+        # Relax edges n-1 times
+        for iteration in range(n - 1):
+            updated = False
             for u, v, w in edges:
-                if dist[u] + w < dist[v]:
+                if dist[u] != float("inf") and dist[u] + w < dist[v]:
                     dist[v] = dist[u] + w
                     parent[v] = u
+                    visited.add(v)
+                    updated = True
+                    
+                    # Visualize current exploration
+                    if visualizer_callback:
+                        visualizer_callback(list(visited), [])
+                        time.sleep(delay)
+            
+            if not updated:
+                break  # No more updates, can exit early
 
-        
+        # Check for negative weight cycles
         for u, v, w in edges:
-            if dist[u] + w < dist[v]:
+            if dist[u] != float("inf") and dist[u] + w < dist[v]:
                 print("Warning: Negative weight cycle detected!")
-                return []
+                return [], set()
 
-      
+        # Check if destination is reachable
         if dist[dst] == float("inf"):
-            return []  
+            return [], visited
+            
+        # Reconstruct path
         path = []
         cur = dst
         while cur is not None:
             path.append(cur)
             cur = parent[cur]
         path.reverse()
-        return path
+        
+        # Final visualization with path
+        if visualizer_callback:
+            visualizer_callback(list(visited), path)
+        
+        return path, visited
     
     @staticmethod
-    def a_star(n, edges, src, dst, heuristic):
+    def a_star(n, edges, src, dst, heuristic, visualizer_callback=None, delay=0.05):
 
         adj = {i: [] for i in range(n)}
         for u, v, w in edges:
@@ -82,6 +115,7 @@ class SPFA_Algorithms:
         g_score = {i: float("inf") for i in range(n)}
         f_score = {i: float("inf") for i in range(n)}
         parent = {i: None for i in range(n)}
+        visited = set()
 
         g_score[src] = 0
         f_score[src] = heuristic(src)
@@ -94,6 +128,13 @@ class SPFA_Algorithms:
             if current == dst:
                 break
 
+            visited.add(current)
+            
+            # Visualize current exploration
+            if visualizer_callback:
+                visualizer_callback(list(visited), [])
+                time.sleep(delay)
+
             for neighbor, w in adj[current]:
                 tentative_g = g_score[current] + w
                 if tentative_g < g_score[neighbor]:
@@ -103,7 +144,7 @@ class SPFA_Algorithms:
                     heapq.heappush(pq, (f_score[neighbor], neighbor))
 
         if g_score[dst] == float("inf"):
-            return []
+            return [], visited
 
         path = []
         cur = dst
@@ -111,20 +152,41 @@ class SPFA_Algorithms:
             path.append(cur)
             cur = parent[cur]
         path.reverse()
-        return path
+        
+        # Final visualization with path
+        if visualizer_callback:
+            visualizer_callback(list(visited), path)
+            
+        return path, visited
 
 class PathFinder:
     """Handles pathfinding algorithms"""
     def __init__(self, visualizer, maze_state):
         self.viz = visualizer
         self.maze_state = maze_state
+        self.is_computing = False
     
-    def compute_path(self, algo_name):
-        """Compute shortest path using specified algorithm"""
+    def visualize_step(self, visited_ids, path_ids):
+        """Callback function to update visualization during algorithm execution"""
+        # Convert IDs to coordinates
+        self.maze_state.intermediate_steps = [self.viz.coord_from_id(vid) for vid in visited_ids]
+        self.maze_state.shortest_path = [self.viz.coord_from_id(pid) for pid in path_ids]
+    
+    def compute_path(self, algo_name, delay=0.05):
+        """Compute shortest path using specified algorithm with real-time visualization"""
         if self.maze_state.start is None:
             raise ValueError("Start cell not set!")
         if self.maze_state.end is None:
             raise ValueError("End cell not set!")
+        
+        if self.is_computing:
+            return  # Prevent multiple simultaneous computations
+        
+        self.is_computing = True
+        
+        # Clear previous results
+        self.maze_state.shortest_path = []
+        self.maze_state.intermediate_steps = []
         
         # Update visualizer references
         self.viz.start = self.maze_state.start
@@ -148,27 +210,40 @@ class PathFinder:
         dst_id = self.viz.id_from_coord(*self.maze_state.end)
         n = self.maze_state.rows * self.maze_state.cols
         
-        # Run selected algorithm
-        path_ids = self._run_algorithm(algo_name, n, edges, src_id, dst_id)
+        # Run selected algorithm with visualization callback
+        result = self._run_algorithm(algo_name, n, edges, src_id, dst_id, delay)
+        path_ids, visited_ids = result
         
-        if path_ids:
-            self.maze_state.shortest_path = [self.viz.coord_from_id(pid) for pid in path_ids]
-            print(f"Found path length: {len(self.maze_state.shortest_path)}")
-        else:
+        self.is_computing = False
+        
+        if not path_ids:
             self.maze_state.shortest_path = []
+            self.maze_state.intermediate_steps = []
             raise ValueError("No path found!")
+        else:
+            print(f"Found path length: {len(path_ids)}")
     
-    def _run_algorithm(self, algo_name, n, edges, src_id, dst_id):
+    def _run_algorithm(self, algo_name, n, edges, src_id, dst_id, delay):
         """Execute the specified pathfinding algorithm"""
         if algo_name == "Dijkstra":
-            return SPFA_Algorithms.dijkstras(n=n, edges=edges, src=src_id, dst=dst_id)
+            return SPFA_Algorithms.dijkstras(
+                n=n, edges=edges, src=src_id, dst=dst_id,
+                visualizer_callback=self.visualize_step,
+                delay=delay
+            )
         elif algo_name == "A*":
             return SPFA_Algorithms.a_star(
                 n=n, edges=edges, src=src_id, dst=dst_id,
-                heuristic=self._manhattan_heuristic
+                heuristic=self._manhattan_heuristic,
+                visualizer_callback=self.visualize_step,
+                delay=delay
             )
         elif algo_name == "Bellman-Ford":
-            return SPFA_Algorithms.bellman_ford(n=n, edges=edges, src=src_id, dst=dst_id)
+            return SPFA_Algorithms.bellman_ford(
+                n=n, edges=edges, src=src_id, dst=dst_id,
+                visualizer_callback=self.visualize_step,
+                delay=delay
+            )
         else:
             raise ValueError(f"Unknown algorithm: {algo_name}")
     

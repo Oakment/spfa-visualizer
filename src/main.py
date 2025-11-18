@@ -1,4 +1,5 @@
 import pygame
+import threading
 from maze import MazeVisualizer, MazeState, UIState
 from algorithms import PathFinder
 
@@ -52,10 +53,18 @@ class SPFAVisualizer:
         # Initialize pathfinder
         self.pathfinder = PathFinder(self.viz, self.maze_state)
         
+        # Speed control
+        self.animation_speed = 0.05  # seconds between steps
+        
         self.running = True
+        self.computing_thread = None
     
     def handle_grid_click(self, mx, my):
         """Handle clicks on the maze grid"""
+        # Don't allow editing while computing
+        if self.pathfinder.is_computing:
+            return
+            
         gx = mx - self.grid_origin[0]
         gy = my - self.grid_origin[1]
         
@@ -73,16 +82,27 @@ class SPFAVisualizer:
             elif self.ui_state.edit_mode == "end":
                 self.maze_state.set_end(row, col)
     
+    def compute_path_async(self):
+        """Run pathfinding in a separate thread"""
+        try:
+            self.pathfinder.compute_path(self.ui_state.selected_algo, delay=self.animation_speed)
+        except ValueError as e:
+            self.ui_state.show_error(f"Error: {str(e)}")
+        except Exception as e:
+            self.ui_state.show_error(f"Error: {str(e)}")
+    
     def handle_button_clicks(self, mx, my):
         """Handle clicks on UI buttons"""
         # Find Path button
         if self.ui_state.find_button.collidepoint(mx, my):
-            try:
-                self.pathfinder.compute_path(self.ui_state.selected_algo)
-            except ValueError as e:
-                self.ui_state.show_error(f"Error: {str(e)}")
-            except Exception as e:
-                self.ui_state.show_error(f"Error: {str(e)}")
+            if not self.pathfinder.is_computing:
+                # Start computation in a separate thread
+                self.computing_thread = threading.Thread(target=self.compute_path_async)
+                self.computing_thread.start()
+            return True
+        
+        # Don't allow other actions while computing
+        if self.pathfinder.is_computing:
             return True
         
         # Clear Maze button
@@ -100,6 +120,12 @@ class SPFAVisualizer:
         for rect, mode, _ in self.ui_state.mode_buttons:
             if rect.collidepoint(mx, my):
                 self.ui_state.edit_mode = mode
+                return True
+        
+        # Speed control buttons
+        for rect, speed_val, _ in self.ui_state.speed_buttons:
+            if rect.collidepoint(mx, my):
+                self.animation_speed = speed_val
                 return True
         
         return False
@@ -129,7 +155,10 @@ class SPFAVisualizer:
         self.screen.fill((45, 45, 55))
         
         # Draw title
-        title_surf = self.title_font.render("SPFA Pathfinding Visualizer", True, (220, 220, 240))
+        title_text = "SPFA Pathfinding Visualizer"
+        if self.pathfinder.is_computing:
+            title_text += " - Computing..."
+        title_surf = self.title_font.render(title_text, True, (220, 220, 240))
         title_rect = title_surf.get_rect(center=(self.screen_width // 2, 30))
         self.screen.blit(title_surf, title_rect)
         
@@ -138,7 +167,7 @@ class SPFAVisualizer:
         self.viz.goal = self.maze_state.end
         self.viz.end = self.maze_state.end
         self.viz.maze = self.maze_state.maze
-        self.viz.draw_grid(self.screen, path=self.maze_state.shortest_path)
+        self.viz.draw_grid(self.screen, path=self.maze_state.shortest_path, intermediate_steps=self.maze_state.intermediate_steps)
         
         # LEFT PANEL - Edit Controls
         self.draw_left_panel()
@@ -178,25 +207,55 @@ class SPFAVisualizer:
         # Edit mode buttons
         for rect, mode, label in self.ui_state.mode_buttons:
             is_selected = mode == self.ui_state.edit_mode
+            is_disabled = self.pathfinder.is_computing
+            
+            if is_disabled:
+                color = (50, 50, 60)
+                border_color = (70, 70, 80)
+            else:
+                color = (100, 150, 220) if is_selected else (70, 70, 85)
+                border_color = (150, 180, 240) if is_selected else (100, 100, 120)
+            
+            pygame.draw.rect(self.screen, color, rect, border_radius=8)
+            pygame.draw.rect(self.screen, border_color, rect, 2, border_radius=8)
+            
+            text_color = (150, 150, 150) if is_disabled else (255, 255, 255)
+            text = self.font.render(label, True, text_color)
+            text_rect = text.get_rect(center=rect.center)
+            self.screen.blit(text, text_rect)
+        
+        # Clear button
+        is_disabled = self.pathfinder.is_computing
+        clear_color = (100, 40, 40) if is_disabled else (180, 70, 70)
+        clear_border = (120, 60, 60) if is_disabled else (220, 100, 100)
+        
+        pygame.draw.rect(self.screen, clear_color, self.ui_state.clear_button, border_radius=8)
+        pygame.draw.rect(self.screen, clear_border, self.ui_state.clear_button, 2, border_radius=8)
+        
+        text_color = (150, 150, 150) if is_disabled else (255, 255, 255)
+        clear_text = self.font.render("Clear Maze", True, text_color)
+        clear_rect = clear_text.get_rect(center=self.ui_state.clear_button.center)
+        self.screen.blit(clear_text, clear_rect)
+        
+        # Speed control section
+        speed_y = self.ui_state.clear_button.bottom + 20
+        speed_title = self.font.render("Animation Speed", True, (220, 220, 240))
+        self.screen.blit(speed_title, (panel_x + 35, speed_y))
+        
+        for rect, speed_val, label in self.ui_state.speed_buttons:
+            is_selected = abs(self.animation_speed - speed_val) < 0.001
             color = (100, 150, 220) if is_selected else (70, 70, 85)
             border_color = (150, 180, 240) if is_selected else (100, 100, 120)
             
             pygame.draw.rect(self.screen, color, rect, border_radius=8)
             pygame.draw.rect(self.screen, border_color, rect, 2, border_radius=8)
             
-            text = self.font.render(label, True, (255, 255, 255))
+            text = self.error_font.render(label, True, (255, 255, 255))
             text_rect = text.get_rect(center=rect.center)
             self.screen.blit(text, text_rect)
         
-        # Clear button
-        pygame.draw.rect(self.screen, (180, 70, 70), self.ui_state.clear_button, border_radius=8)
-        pygame.draw.rect(self.screen, (220, 100, 100), self.ui_state.clear_button, 2, border_radius=8)
-        clear_text = self.font.render("Clear Maze", True, (255, 255, 255))
-        clear_rect = clear_text.get_rect(center=self.ui_state.clear_button.center)
-        self.screen.blit(clear_text, clear_rect)
-        
         # Status info
-        status_y = self.ui_state.clear_button.bottom + 40
+        status_y = self.ui_state.speed_buttons[-1][0].bottom + 30
         
         status_lines = [
             f"Current Mode:",
@@ -235,20 +294,32 @@ class SPFAVisualizer:
         # Algorithm buttons
         for rect, name in self.ui_state.algo_buttons:
             is_selected = name == self.ui_state.selected_algo
-            color = (100, 180, 120) if is_selected else (70, 70, 85)
-            border_color = (130, 220, 150) if is_selected else (100, 100, 120)
+            is_disabled = self.pathfinder.is_computing
+            
+            if is_disabled:
+                color = (50, 60, 50)
+                border_color = (70, 80, 70)
+            else:
+                color = (100, 180, 120) if is_selected else (70, 70, 85)
+                border_color = (130, 220, 150) if is_selected else (100, 100, 120)
             
             pygame.draw.rect(self.screen, color, rect, border_radius=8)
             pygame.draw.rect(self.screen, border_color, rect, 2, border_radius=8)
             
-            text = self.font.render(name, True, (255, 255, 255))
+            text_color = (150, 150, 150) if is_disabled else (255, 255, 255)
+            text = self.font.render(name, True, text_color)
             text_rect = text.get_rect(center=rect.center)
             self.screen.blit(text, text_rect)
         
         # Find Path button
-        pygame.draw.rect(self.screen, (70, 140, 200), self.ui_state.find_button, border_radius=8)
-        pygame.draw.rect(self.screen, (100, 170, 230), self.ui_state.find_button, 3, border_radius=8)
-        find_text = self.font.render("Find Path", True, (255, 255, 255))
+        is_computing = self.pathfinder.is_computing
+        button_color = (50, 100, 140) if is_computing else (70, 140, 200)
+        border_color = (70, 120, 160) if is_computing else (100, 170, 230)
+        button_text = "Computing..." if is_computing else "Find Path"
+        
+        pygame.draw.rect(self.screen, button_color, self.ui_state.find_button, border_radius=8)
+        pygame.draw.rect(self.screen, border_color, self.ui_state.find_button, 3, border_radius=8)
+        find_text = self.font.render(button_text, True, (255, 255, 255))
         find_rect = find_text.get_rect(center=self.ui_state.find_button.center)
         self.screen.blit(find_text, find_rect)
         
@@ -272,6 +343,11 @@ class SPFAVisualizer:
             self.draw_ui()
             pygame.display.flip()
             self.clock.tick(60)
+        
+        # Wait for computation thread to finish before closing
+        if self.computing_thread and self.computing_thread.is_alive():
+            self.pathfinder.is_computing = False
+            self.computing_thread.join(timeout=1.0)
         
         pygame.quit()
 

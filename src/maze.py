@@ -16,6 +16,7 @@ class MazeVisualizer:
         self.END_COLOR = (240, 100, 100)
         self.GRID_LINE = (100, 100, 120)
         self.PATH_COLOR = (100, 150, 255)
+        self.INTERMEDIATE_COLOR = (255, 255, 100)  # Yellow for intermediate steps
 
         # Maze (0 = path, 1 = wall). If not provided, initialize empty.
         if maze is None:
@@ -32,7 +33,7 @@ class MazeVisualizer:
     def coord_from_id(self, id_):
         return (id_ // self.cols, id_ % self.cols)
 
-    def draw_grid(self, surface, path=None):
+    def draw_grid(self, surface, path=None, intermediate_steps=None):
         ox, oy = self.grid_origin
 
         # Draw grid border
@@ -45,9 +46,11 @@ class MazeVisualizer:
 
         for r in range(self.rows):
             for c in range(self.cols):
-                # Determine cell color with priority
+                # Determine cell color with priority: path > intermediate > start/end > walls/empty
                 if path and (r, c) in path:
                     color = self.PATH_COLOR
+                elif intermediate_steps and (r, c) in intermediate_steps:
+                    color = self.INTERMEDIATE_COLOR
                 elif (r, c) == self.start:
                     color = self.START_COLOR
                 elif (r, c) == self.end:
@@ -114,12 +117,14 @@ class MazeState:
         self.start = None
         self.end = None
         self.shortest_path = []
+        self.intermediate_steps = []  # Nodes explored during pathfinding
     
     def toggle_wall(self, row, col):
         """Toggle wall at given position"""
         if 0 <= row < self.rows and 0 <= col < self.cols:
             self.maze[row][col] = 1 - self.maze[row][col]
             self.shortest_path = []
+            self.intermediate_steps = []
     
     def set_start(self, row, col):
         """Set start position and ensure it's not a wall"""
@@ -127,6 +132,7 @@ class MazeState:
             self.start = (row, col)
             self.maze[row][col] = 0
             self.shortest_path = []
+            self.intermediate_steps = []
     
     def set_end(self, row, col):
         """Set end position and ensure it's not a wall"""
@@ -134,6 +140,7 @@ class MazeState:
             self.end = (row, col)
             self.maze[row][col] = 0
             self.shortest_path = []
+            self.intermediate_steps = []
     
     def clear(self):
         """Reset maze to empty state"""
@@ -141,6 +148,7 @@ class MazeState:
         self.start = None
         self.end = None
         self.shortest_path = []
+        self.intermediate_steps = []
 
 
 class UIState:
@@ -167,6 +175,21 @@ class UIState:
         ]
         
         self.clear_button = pygame.Rect(left_x, mode_start_y + 200, button_width, button_height)
+        
+        # Speed control buttons
+        speed_start_y = mode_start_y + 290
+        speed_button_width = 60
+        speed_button_height = 35
+        speed_spacing = 5
+        
+        self.speed_buttons = [
+            (pygame.Rect(left_x, speed_start_y, speed_button_width, speed_button_height), 
+             0.001, "Fast"),
+            (pygame.Rect(left_x + speed_button_width + speed_spacing, speed_start_y, speed_button_width, speed_button_height), 
+             0.05, "Normal"),
+            (pygame.Rect(left_x + 2 * (speed_button_width + speed_spacing), speed_start_y, speed_button_width, speed_button_height), 
+             0.2, "Slow"),
+        ]
         
         # Right panel buttons (Algorithm Selection)
         right_x = right_panel_x + 20
