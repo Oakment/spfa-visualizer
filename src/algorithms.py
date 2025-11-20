@@ -159,6 +159,11 @@ class SPFA_Algorithms:
             
         return path, visited
 
+    @staticmethod
+    def dfs(maze,start,goal,ROWS,COLS):
+        # TODO: implement your code here
+        pass
+
 class PathFinder:
     """Handles pathfinding algorithms"""
     def __init__(self, visualizer, maze_state):
@@ -244,6 +249,9 @@ class PathFinder:
                 visualizer_callback=self.visualize_step,
                 delay=delay
             )
+        elif algo_name == "DFS":
+            # TODO: Integrate DFS algorithm
+            return
         else:
             raise ValueError(f"Unknown algorithm: {algo_name}")
     
