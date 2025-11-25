@@ -1,6 +1,7 @@
 import heapq
 import time
 
+
 class SPFA_Algorithms:
     @staticmethod
     def dijkstras(n, edges, src, dst, visualizer_callback=None, delay=0.05):
@@ -46,7 +47,7 @@ class SPFA_Algorithms:
         while cur is not None:
             path.append(cur)
             cur = parent[cur]
-
+ 
         path.reverse()
         
         # Final visualization with path
@@ -158,11 +159,46 @@ class SPFA_Algorithms:
             visualizer_callback(list(visited), path)
             
         return path, visited
-
+    
     @staticmethod
-    def dfs(maze,start,goal,ROWS,COLS):
-        # TODO: implement your code here
-        pass
+    def bfs(n, edges, src, dst,visualizer_callback=None, delay=0.05):
+        from collections import deque
+        # Build adjacency list
+        adj = {i: [] for i in range(n)}
+        for u, v, *_ in edges:
+            adj[u].append(v)
+        
+        visited = {src: None}
+        queue = deque([src])
+        checked = []
+
+        while queue:
+            current = queue.popleft()
+            checked.append(current)
+            # Visualize visited node
+            if visualizer_callback:
+                visualizer_callback(checked.copy(), [])
+                time.sleep(delay)
+            # Destination found → reconstruct shortest path
+            if current == dst:
+                path = []
+                while current is not None:
+                    path.append(current)
+                    current = visited[current]
+                path.reverse()
+                #Final visualization (show path)
+                if visualizer_callback:
+                    visualizer_callback(checked, path)
+
+                return path, checked
+            # Explore neighbors
+            for i in adj[current]:
+                if i not in  visited:
+                    visited[i] = current
+                    queue.append(i) 
+        # If no path found
+        return None, checked
+            
 
 class PathFinder:
     """Handles pathfinding algorithms"""
@@ -211,6 +247,7 @@ class PathFinder:
                 v = self.viz.id_from_coord(nr, nc)
                 edges.append((u, v, 1))
         
+        
         src_id = self.viz.id_from_coord(*self.maze_state.start)
         dst_id = self.viz.id_from_coord(*self.maze_state.end)
         n = self.maze_state.rows * self.maze_state.cols
@@ -249,9 +286,13 @@ class PathFinder:
                 visualizer_callback=self.visualize_step,
                 delay=delay
             )
-        elif algo_name == "DFS":
-            # TODO: Integrate DFS algorithm
-            return
+        elif algo_name == "BFS":
+            return SPFA_Algorithms.bfs(
+            n=n, edges=edges, src=src_id, dst=dst_id,
+            visualizer_callback=self.visualize_step,
+            delay=delay
+        )
+            
         else:
             raise ValueError(f"Unknown algorithm: {algo_name}")
     
