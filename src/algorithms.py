@@ -252,6 +252,46 @@ class PathFinder:
         dst_id = self.viz.id_from_coord(*self.maze_state.end)
         n = self.maze_state.rows * self.maze_state.cols
         
+        # Run the selected algorithm once without visualization to measure pure computation time
+        try:
+            t0 = time.perf_counter()
+            if algo_name == "Dijkstra":
+                path_ids_no_vis, visited_ids_no_vis = SPFA_Algorithms.dijkstras(
+                    n=n, edges=edges, src=src_id, dst=dst_id,
+                    visualizer_callback=None, delay=0
+                )
+            elif algo_name == "A*":
+                path_ids_no_vis, visited_ids_no_vis = SPFA_Algorithms.a_star(
+                    n=n, edges=edges, src=src_id, dst=dst_id,
+                    heuristic=self._manhattan_heuristic, visualizer_callback=None, delay=0
+                )
+            elif algo_name == "Bellman-Ford":
+                path_ids_no_vis, visited_ids_no_vis = SPFA_Algorithms.bellman_ford(
+                    n=n, edges=edges, src=src_id, dst=dst_id,
+                    visualizer_callback=None, delay=0
+                )
+            elif algo_name == "BFS":
+                path_ids_no_vis, visited_ids_no_vis = SPFA_Algorithms.bfs(
+                    n=n, edges=edges, src=src_id, dst=dst_id,
+                    visualizer_callback=None, delay=0
+                )
+            elif algo_name == "DFS":
+                path_ids_no_vis, visited_ids_no_vis = SPFA_Algorithms.dfs(
+                    n=n, edges=edges, src=src_id, dst=dst_id,
+                    visualizer_callback=None, delay=0
+                )
+            else:
+                # Unknown/unsupported algorithm (shouldn't happen if all algos implemented)
+                path_ids_no_vis, visited_ids_no_vis = [], set()
+            t1 = time.perf_counter()
+            elapsed = t1 - t0
+            # Save timing into maze state (seconds) with visited count
+            visited_count = len(visited_ids_no_vis) if visited_ids_no_vis is not None else 0
+            self.maze_state.timings[algo_name] = {"time": elapsed, "visited": visited_count}
+        except Exception:
+            # If measurement step fails for any reason, ignore timing
+            pass
+
         # Run selected algorithm with visualization callback
         result = self._run_algorithm(algo_name, n, edges, src_id, dst_id, delay)
         path_ids, visited_ids = result
