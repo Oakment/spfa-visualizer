@@ -198,7 +198,55 @@ class SPFA_Algorithms:
                     queue.append(i) 
         # If no path found
         return None, checked
+    
+     
+    @staticmethod
+    def dfs(n, edges, src, dst, visualizer_callback=None, delay=0.05):
+        # Build adjacency list
+        adj = {i: [] for i in range(n)}
+        for u, v, *_ in edges:
+            adj[u].append(v)
+ 
+        stack = [src]
+        parent = {src: None}
+        visited = set([src])
+        checked = []  # order in which nodes are popped/processed (for visualization)
+
+        while stack:
+            node = stack.pop()
+            checked.append(node)
+
             
+            if visualizer_callback:
+                visualizer_callback(checked.copy(), [])
+                time.sleep(delay)
+
+            
+            if node == dst:
+                path = []
+                cur = node
+                while cur is not None:
+                    path.append(cur)
+                    cur = parent[cur]
+                path.reverse()
+
+                 
+                if visualizer_callback:
+                    visualizer_callback(checked, path)
+
+                return path, visited
+
+            # Explore neighbors — push unvisited neighbors onto stack
+             
+            for neigh in reversed(adj.get(node, [])):
+                if neigh not in visited:
+                    visited.add(neigh)
+                    parent[neigh] = node
+                    stack.append(neigh)
+
+        # Destination not reachable
+        return [], visited
+  
 
 class PathFinder:
     """Handles pathfinding algorithms"""
@@ -292,6 +340,14 @@ class PathFinder:
             visualizer_callback=self.visualize_step,
             delay=delay
         )
+        
+        elif algo_name == "DFS":
+            return SPFA_Algorithms.dfs(
+            n=n, edges=edges, src=src_id, dst=dst_id,
+            visualizer_callback=self.visualize_step,
+            delay=delay
+        )
+
             
         else:
             raise ValueError(f"Unknown algorithm: {algo_name}")
