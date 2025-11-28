@@ -152,48 +152,63 @@ class SPFAVisualizer:
         return False
     
     def handle_events(self):
-        """Process pygame events with smooth click-and-drag wall editing"""
-        mouse_held = pygame.mouse.get_pressed()  # (left, middle, right)
+        mouse_held = pygame.mouse.get_pressed()
         mx, my = pygame.mouse.get_pos()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
 
-            elif event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.MOUSEMOTION:
-                # Only edit grid if left or right button is held
-                if mouse_held[0] or mouse_held[2]:
-                    # Check if inside grid
-                    gx = mx - self.grid_origin[0]
-                    gy = my - self.grid_origin[1]
-                    if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
-                        row = gy // CELL_SIZE
-                        col = gx // CELL_SIZE
-                        if 0 <= row < ROWS and 0 <= col < COLS:
-                            if not self.pathfinder.is_computing:
-                                # Wall editing mode
-                                if self.ui_state.edit_mode == "wall":
-                                    # Left click draws wall
-                                    if mouse_held[0] and self.maze_state.maze[row][col] != 1:
-                                        self.maze_state.maze[row][col] = 1
-                                        self.maze_state.shortest_path = []
-                                        self.maze_state.intermediate_steps = []
-                                        self.maze_state.timings = {}
-                                    # Right click erases wall
-                                    elif mouse_held[2] and self.maze_state.maze[row][col] != 0:
-                                        self.maze_state.maze[row][col] = 0
-                                        self.maze_state.shortest_path = []
-                                        self.maze_state.intermediate_steps = []
-                                        self.maze_state.timings = {}
-                                # Start/end placement mode
-                                elif self.ui_state.edit_mode == "start":
-                                    self.maze_state.set_start(row, col)
-                                elif self.ui_state.edit_mode == "end":
-                                    self.maze_state.set_end(row, col)
+            # --- ERASE ON CLICK (no dragging) ---
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                gx = mx - self.grid_origin[0]
+                gy = my - self.grid_origin[1]
 
-                # Check button clicks only on MOUSEBUTTONDOWN (not motion)
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    self.handle_button_clicks(mx, my)
+                if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
+                    row = gy // CELL_SIZE
+                    col = gx // CELL_SIZE
+
+                    if self.ui_state.edit_mode == "wall":
+                        # erase
+                        if self.maze_state.maze[row][col] != 0:
+                            self.maze_state.maze[row][col] = 0
+                            self.maze_state.shortest_path = []
+                            self.maze_state.intermediate_steps = []
+                            self.maze_state.timings = {}
+
+                # button UI clicks
+                self.handle_button_clicks(mx, my)
+
+            # --- DRAW ON DRAG ---
+            if event.type == pygame.MOUSEMOTION and mouse_held[0]:
+                gx = mx - self.grid_origin[0]
+                gy = my - self.grid_origin[1]
+
+                if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
+                    row = gy // CELL_SIZE
+                    col = gx // CELL_SIZE
+
+                    if self.ui_state.edit_mode == "wall":
+                        if self.maze_state.maze[row][col] != 1:
+                            self.maze_state.maze[row][col] = 1
+                            self.maze_state.shortest_path = []
+                            self.maze_state.intermediate_steps = []
+                            self.maze_state.timings = {}
+
+            # --- START / END placement still handled normally ---
+            if mouse_held[0] and not self.pathfinder.is_computing:
+                gx = mx - self.grid_origin[0]
+                gy = my - self.grid_origin[1]
+
+                if 0 <= gx < self.grid_width and 0 <= gy < self.grid_height:
+                    row = gy // CELL_SIZE
+                    col = gx // CELL_SIZE
+
+                    if self.ui_state.edit_mode == "start":
+                        self.maze_state.set_start(row, col)
+                    elif self.ui_state.edit_mode == "end":
+                        self.maze_state.set_end(row, col)
+
 
     
     def draw_ui(self):
@@ -346,7 +361,7 @@ class SPFAVisualizer:
         # Section title
         y_offset = panel_y + 20
         title = self.font.render("Edit Controls", True, (220, 220, 240))
-        self.screen.blit(title, (panel_x + 50, y_offset))
+        self.screen.blit(title, (panel_x + 70, y_offset))
         
         y_offset += 50
         
@@ -410,7 +425,7 @@ class SPFAVisualizer:
         # Speed control sits below the preset buttons (computed inside UIState)
         speed_y = self.ui_state.preset_buttons[-1][0].bottom + 20
         speed_title = self.font.render("Animation Speed", True, (220, 220, 240))
-        self.screen.blit(speed_title, (panel_x + 35, speed_y))
+        self.screen.blit(speed_title, (panel_x + 50, speed_y))
         
         for rect, speed_val, label in self.ui_state.speed_buttons:
             is_selected = abs(self.animation_speed - speed_val) < 0.001
@@ -425,17 +440,12 @@ class SPFAVisualizer:
             self.screen.blit(text, text_rect)
         
         # Status info
-        status_y = self.ui_state.speed_buttons[-1][0].bottom + 30
+        status_y = self.ui_state.speed_buttons[-1][0].bottom + 10
         
         status_lines = [
-            f"Current Mode:",
-            f"  {self.ui_state.edit_mode.title()}",
-            "",
-            f"Start Position:",
-            f"  {self.maze_state.start if self.maze_state.start else 'Not set'}",
-            "",
-            f"End Position:",
-            f"  {self.maze_state.end if self.maze_state.end else 'Not set'}",
+            f"Current Mode - {self.ui_state.edit_mode.title()}",
+            f"Start Position - {self.maze_state.start if self.maze_state.start else 'Not set'}",
+            f"End Position - {self.maze_state.end if self.maze_state.end else 'Not set'}",
         ]
         
         for i, line in enumerate(status_lines):
@@ -457,7 +467,7 @@ class SPFAVisualizer:
         # Section title
         y_offset = panel_y + 20
         title = self.font.render("Algorithm", True, (220, 220, 240))
-        self.screen.blit(title, (panel_x + 70, y_offset))
+        self.screen.blit(title, (panel_x + 75, y_offset))
 
         y_offset += 50
 
